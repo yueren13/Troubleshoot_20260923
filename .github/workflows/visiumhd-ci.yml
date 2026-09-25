@@ -1,0 +1,47 @@
+name: Visium HD lightweight checks
+
+on:
+  push:
+    paths: ["visiumhd_pipeline/**", ".github/workflows/visiumhd-ci.yml"]
+  pull_request:
+    paths: ["visiumhd_pipeline/**", ".github/workflows/visiumhd-ci.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visiumhd-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpu-synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: visiumhd_pipeline
+    env:
+      MPLBACKEND: Agg
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install lightweight dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r env/ci.requirements.in
+          python -m pip install -e . --no-deps
+      - name: Validate source and clean notebooks
+        run: python tools/validate_repository.py
+      - name: Run CPU synthetic tests only
+        run: python -m pytest -q tests/test_core.py tests/test_control.py
