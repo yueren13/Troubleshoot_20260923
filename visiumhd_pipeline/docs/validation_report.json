@@ -1,0 +1,23 @@
+{
+  "date": "2026-09-24",
+  "notebooks_valid": 15,
+  "code_cells_compile": 38,
+  "python_files_parse": 35,
+  "pytest": "66 passed, 3 skipped",
+  "not_executed": [
+    "AnnData/SpatialData roundtrips (packages unavailable)",
+    "Real whole-slide pipeline",
+    "StarDist GPU",
+    "Proseg binary",
+    "scVI single/DDP GPU training",
+    "RAPIDS single/multi-GPU",
+    "S3 IAM/staging/publication"
+  ],
+  "executed": [
+    "CSV schema/routing/path validation",
+    "Resource/concurrency/seed API unit tests",
+    "Subprocess success/failure logs",
+    "Local immutable publication with SHA256 readback",
+    "Inherited coordinate/count/QC/palette unit tests"
+  ]
+}

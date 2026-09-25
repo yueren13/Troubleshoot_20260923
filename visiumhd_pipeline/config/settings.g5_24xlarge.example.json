@@ -1,0 +1,235 @@
+{
+  "pipeline_version": "0.2.0-csv-review",
+  "coordinates": {
+    "grid_max_residual_px": 0.1
+  },
+  "bin_qc": {
+    "mode": "fresh",
+    "legacy_class_column": "qc_class",
+    "legacy_extra_obs_columns": "all",
+    "keep_classes": [
+      "tissue-high_transcript-high",
+      "tissue-high_transcript-low"
+    ],
+    "tissue_od_threshold": 0.08,
+    "transcript_umi_threshold": 1
+  },
+  "he_normalization": {
+    "enabled": false,
+    "reference_image": null,
+    "foreground_od": 0.08,
+    "use_for_stardist": false
+  },
+  "stardist": {
+    "model": "2D_versatile_he",
+    "prob_thresh": 0.02,
+    "nms_thresh": 0.3,
+    "target_mpp": 0.3,
+    "crop_buffer_um": 50.0,
+    "min_qc_keep_bins_per_nucleus": 1,
+    "context": 128,
+    "min_overlap": 256,
+    "attempts": [
+      [
+        4096,
+        [
+          2,
+          2,
+          1
+        ]
+      ],
+      [
+        2048,
+        [
+          2,
+          2,
+          1
+        ]
+      ],
+      [
+        2048,
+        [
+          4,
+          4,
+          1
+        ]
+      ]
+    ],
+    "require_gpu": true,
+    "max_image_work_gib": 64
+  },
+  "proseg": {
+    "executable": "/EDIT/bin/proseg",
+    "execute": false,
+    "parallel_samples": 1,
+    "threads_per_sample": 20,
+    "estimated_gib_per_sample": null,
+    "diffusion_sigma_near": 2.0,
+    "diffusion_sigma_far": 8.0,
+    "samples": null,
+    "burnin_samples": null,
+    "ncomponents": null,
+    "accept_valid_outputs_after_nonzero_exit": false
+  },
+  "cells": {
+    "mode": "proseg",
+    "legacy_counts_layer": null,
+    "feature_mapping": "auto_exact",
+    "proseg_count_orientation": "cells_by_genes",
+    "qc": {
+      "min_counts": 1,
+      "min_genes": 1,
+      "max_pct_mt": null,
+      "min_area_um2": null,
+      "max_area_um2": null
+    }
+  },
+  "metadata_transfer": {
+    "enabled": true,
+    "bin_scope": "all_bins",
+    "chunk_size": 250000,
+    "max_categories": 30,
+    "categorical": [
+      "qc_class"
+    ],
+    "boolean": [
+      "qc_keep"
+    ],
+    "continuous": {}
+  },
+  "cell_cycle": {
+    "enabled": false,
+    "gene_lists_json": null,
+    "min_matched_genes_per_phase": 5
+  },
+  "storage": {
+    "image_tile_size": 1024,
+    "image_scale_factors": [
+      2,
+      2,
+      2,
+      2
+    ],
+    "io_workers": 4,
+    "include_normalized_he": false,
+    "include_nuclei_prior": false
+  },
+  "plots": {
+    "dpi": 300,
+    "thumbnail_max_side": 3000,
+    "max_spatial_points": 300000,
+    "roi_size_px": 2000
+  },
+  "scvi": {
+    "run_name": "scvi_v1",
+    "n_hvg": 5000,
+    "min_counts": 1,
+    "min_genes": 1,
+    "hvg_spans": [
+      0.3,
+      0.5,
+      1.0
+    ],
+    "exclude_prefixes": [],
+    "n_latent": 30,
+    "n_hidden": 128,
+    "n_layers": 2,
+    "gene_likelihood": "nb",
+    "max_epochs": 200,
+    "batch_size": 1024,
+    "train_size": 0.9,
+    "early_stopping_patience": 30,
+    "learning_rate": 0.001,
+    "seed": 42,
+    "require_gpu": true,
+    "max_training_ram_gib": 300,
+    "diagnostic_metadata_columns": []
+  },
+  "clustering": {
+    "n_neighbors": 30,
+    "umap_min_dist": 0.3,
+    "seed": 42,
+    "leiden_iterations": 2,
+    "point_size": 0.65,
+    "max_umap_points": null,
+    "allow_palette_extension": true,
+    "backend": "rapids",
+    "rapids_neighbor_algorithm": "cagra",
+    "rapids_neighbor_options": {},
+    "rapids_leiden_iterations": 100
+  },
+  "run_id": "pilot_v2_001",
+  "execution": {
+    "python_spatial": "/EDIT/envs/spatial/bin/python",
+    "python_stardist": "/EDIT/envs/stardist/bin/python",
+    "python_scvi": "/EDIT/envs/scvi/bin/python",
+    "python_rapids": "/EDIT/envs/rapids/bin/python",
+    "gpu_ids": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "reserve_cpus": 8,
+    "reserve_ram_gib": 40,
+    "host_ram_budget_gib": 300,
+    "cpu": {
+      "workers": 1,
+      "threads_per_worker": 8,
+      "estimated_ram_gib_per_worker": null
+    },
+    "stardist": {
+      "workers": 4,
+      "threads_per_worker": 8,
+      "estimated_ram_gib_per_worker": null
+    },
+    "proseg": {
+      "workers": 4,
+      "threads_per_worker": 20,
+      "estimated_ram_gib_per_worker": null
+    },
+    "integration_threads": 8,
+    "scvi": {
+      "mode": "single",
+      "devices": 1
+    },
+    "dask": {
+      "threads_per_worker": 2,
+      "host_memory_limit_per_worker": "60GiB",
+      "device_memory_limit": 0.7
+    }
+  },
+  "storage_policy": {
+    "enforce_allowlists": true,
+    "approved_tmp_roots": [
+      "/EDIT/approved_scratch"
+    ],
+    "approved_object_roots": [
+      "s3://EDIT-APPROVED-BUCKET/vhd/objects",
+      "/EDIT/approved_objects"
+    ],
+    "approved_plot_roots": [
+      "/EDIT/approved_plots",
+      "s3://EDIT-APPROVED-BUCKET/vhd/plots"
+    ],
+    "approved_data_roots": [
+      "/EDIT/approved_tables",
+      "s3://EDIT-APPROVED-BUCKET/vhd/tables"
+    ],
+    "allow_remote_staging": false,
+    "allow_remote_publication": false,
+    "min_free_tmp_gib": 20,
+    "max_remote_stage_gib": 500,
+    "verify_remote_sha256": false
+  },
+  "integration": {
+    "control_dir": "/EDIT/approved_scratch/control",
+    "tmp_dir": "/EDIT/approved_scratch/integration",
+    "output_object_dir": "/EDIT/approved_objects",
+    "output_plot_dir": "/EDIT/approved_plots",
+    "output_data_dir": "/EDIT/approved_tables"
+  },
+  "import": {
+    "max_matrix_gib": 100
+  }
+}
