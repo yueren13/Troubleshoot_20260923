@@ -15,6 +15,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch/pull-request workflow,
 [AGENTS.md](AGENTS.md) for engineering constraints, and the
 [roadmap](visiumhd_pipeline/docs/ROADMAP.md) for validation priorities.
 
+**The foundation source import is complete.** Its [import and validation record](visiumhd_pipeline/IMPORT_STATUS.md) distinguishes source completeness from scientific runtime validation. The work is in [draft PR #1](https://github.com/yueren13/Troubleshoot_20260923/pull/1), not merged into `main`. Resolve the [scVI training-to-inference guard issue](https://github.com/yueren13/Troubleshoot_20260923/issues/2) before a training pilot.
+
 **Review release, not production validation.** CPU unit tests do not validate whole-slide processing, biological accuracy, GPU workflows or institutional storage compliance.
 
 This repository is public. Commit source, synthetic tests and sanitized examples only.
