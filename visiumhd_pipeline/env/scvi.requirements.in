@@ -1,0 +1,5 @@
+# Separate from TensorFlow/StarDist; install a PyTorch build appropriate for your machine.
+# This is solver input, NOT a verified environment lock.
+-r spatial.requirements.in
+scvi-tools
+torch
