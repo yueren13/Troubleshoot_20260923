@@ -44,4 +44,4 @@ jobs:
       - name: Validate source and clean notebooks
         run: python tools/validate_repository.py
       - name: Run CPU synthetic tests only
-        run: python -m pytest -q tests/test_core.py tests/test_control.py
+        run: python -m pytest -q tests/test_core.py tests/test_control.py tests/test_scvi_state.py
