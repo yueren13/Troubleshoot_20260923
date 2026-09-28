@@ -1,7 +1,7 @@
-"""scVI script/DDP training; all expression must be explicitly selected raw counts.
+"""scVI script/DDP training; raw-count inputs only.
 
-DDP workers train only. Inference runs in a new single-GPU process after torchrun exits.
-This avoids notebook spawning and multiple ranks competing to write latent arrays.
+DDP trains only. Inference runs separately with one writer. Stage-state decisions
+preserve a verified model receipt while the final inference receipt is absent.
 """
 from __future__ import annotations
 import argparse
@@ -17,20 +17,24 @@ def execute(cfg,phase):
     import anndata as ad
     import scvi
     import torch
-    from ..core import VERSION,digest,dump_json,file_stamp,integer_csr,reusable,completed,environment_report
+    from ..core import VERSION,digest,dump_json,file_stamp,integer_csr,completed,environment_report
     from ..integration import integration_dir,sparse_h5_ram_estimate
+    from .scvi_state import classify_training_state,record_model_receipt
     p=integration_dir(cfg); settings=cfg['scvi']; execution=cfg['execution']['scvi']
     ddp=execution['mode']=='ddp'; world=int(os.environ.get('WORLD_SIZE','1')); rank=int(os.environ.get('RANK','0'))
+    if phase=='infer' and world!=1:
+        raise RuntimeError('Inference is single-writer; do not launch it with torchrun.')
     sig=digest({'version':VERSION,'input':file_stamp(p/'scvi_counts_hvg.h5ad'),
                 'scvi_version':scvi.__version__,'scvi':settings,'execution':execution})
     required=[p/'model'/'model.pt',p/'latent.npy',p/'training_obs.parquet',p/'training_var.csv']
-    marker=p/'09_train_complete.json'; receipt=p/'09_model_saved.json'
-    if reusable(marker,sig,required): return {'status':'reused'}
+    marker=p/'09_train_complete.json'
+    state=classify_training_state(p,sig,phase)
+    if state=='complete': return {'status':'reused'}
+    if state=='model_ready' and phase=='train':
+        return {'status':'model_reused_waiting_for_inference'}
     estimate=sparse_h5_ram_estimate(p/'scvi_counts_hvg.h5ad')
     ranks=execution['devices'] if ddp and phase=='train' else 1
     needed=estimate['conservative_working_gib']*ranks
-    # Rank-zero preflight must occur before ranks allocate. Other ranks follow the same estimate;
-    # do not multiply *currently shrinking* free memory gates after ranks begin to allocate.
     available=psutil.virtual_memory().available/2**30
     budget=min(float(settings['max_training_ram_gib']),float(cfg['execution'].get('host_ram_budget_gib',300)))
     if needed>budget: raise MemoryError(f'DDP-aware RAM estimate {needed:.1f} GiB ({ranks} replicas) > configured {budget:.1f} GiB.')
@@ -39,12 +43,6 @@ def execute(cfg,phase):
     if settings['require_gpu'] and not torch.cuda.is_available(): raise RuntimeError('PyTorch CUDA is not available.')
     if ddp and phase=='train' and world!=execution['devices']:
         raise RuntimeError('Launch DDP with the supplied torchrun launcher, not a notebook cell.')
-    if phase=='train' and receipt.exists():
-        if json.loads(receipt.read_text())['signature']!=sig: raise FileExistsError('Existing model has a different configuration. Use new run_id.')
-        return {'status':'model_reused_waiting_for_inference'}
-    if phase=='train' and (p/'model').exists(): raise FileExistsError('Incomplete model; inspect it and select new run_id. No automatic overwrite.')
-    if phase=='infer' and (not receipt.exists() or json.loads(receipt.read_text())['signature']!=sig):
-        raise RuntimeError('No matching trained model receipt.')
     scvi.settings.seed=settings['seed']; torch.set_float32_matmul_precision('high')
     a=ad.read_h5ad(p/'scvi_counts_hvg.h5ad'); a.X=integer_csr(a.X).astype(np.float32)
     a.obs['sample']=a.obs['sample'].astype('category')
@@ -65,7 +63,6 @@ def execute(cfg,phase):
             plan_kwargs={'lr':settings['learning_rate']},enable_checkpointing=False,
             enable_progress_bar=False,logger=False,default_root_dir=str(p/'runtime'/'lightning'))
     if ddp:
-        # Current official scVI multi-GPU guide: early stopping is unsupported.
         kw.update(strategy='ddp_find_unused_parameters_true',train_size=1.0,validation_size=0.0,
                   early_stopping=False,check_val_every_n_epoch=None)
     else:
@@ -74,6 +71,7 @@ def execute(cfg,phase):
     model.train(**kw)
     if rank==0:
         model.save(str(p/'model'),overwrite=False,save_anndata=False)
+        record_model_receipt(p,sig,history_complete=False,world_size=world)
         history=p/'history'; history.mkdir(exist_ok=True)
         for key,value in model.history.items():
             frame=pd.DataFrame(value); frame.to_csv(history/f'{key}.csv')
@@ -85,10 +83,11 @@ def execute(cfg,phase):
                 for col in numeric: ax.plot(numeric[col].to_numpy(),label=str(col))
                 ax.set(title=f'scVI: {key}',xlabel='Recorded epoch/step',ylabel=str(key)); ax.legend()
                 finish(fig,history/f'{key}.png',cfg['plots']['dpi'])
-        dump_json({'signature':sig,'world_size':world,'per_device_batch_size':settings['batch_size'],
-                   'nominal_global_batch_size':settings['batch_size']*world,
-                   'no_heldout_validation_in_ddp':ddp,'early_stopping':not ddp,
-                   'estimated_host_ram_gib':needed,'environment':environment_report()},receipt)
+        record_model_receipt(p,sig,history_complete=True,world_size=world,
+                   per_device_batch_size=settings['batch_size'],
+                   nominal_global_batch_size=settings['batch_size']*world,
+                   no_heldout_validation_in_ddp=ddp,early_stopping=not ddp,
+                   estimated_host_ram_gib=needed,environment=environment_report())
     return {'status':'trained','rank':rank}
 
 
