@@ -1,0 +1,12 @@
+# Lightweight CPU-only synthetic tests; not a scientific/GPU lockfile.
+numpy
+pandas
+scipy
+psutil
+fsspec
+geopandas
+shapely>=2
+matplotlib
+scikit-image
+pytest
+nbformat

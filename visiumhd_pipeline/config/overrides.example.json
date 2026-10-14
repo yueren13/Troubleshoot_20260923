@@ -1,0 +1,12 @@
+{
+  "cells": {
+    "qc": {
+      "min_counts": 1,
+      "min_genes": 1,
+      "max_pct_mt": null
+    }
+  },
+  "stardist": {
+    "prob_thresh": 0.02
+  }
+}

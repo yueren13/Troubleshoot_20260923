@@ -1,0 +1,6 @@
+# Prefer a clone of your proven TensorFlow/StarDist environment.
+# This is NOT a tested GPU dependency lock or CUDA-driver installation prescription.
+-r spatial.requirements.in
+tensorflow
+stardist
+csbdeep

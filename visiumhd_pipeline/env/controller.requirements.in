@@ -1,0 +1,9 @@
+# Small controller / publication environment. Not a tested lockfile.
+numpy
+pandas
+scipy
+psutil
+fsspec
+s3fs
+nbformat
+ipykernel
