@@ -1,0 +1,32 @@
+python - <<'PY' # or python3 - <<'PY' 
+from pathlib import Path
+
+for proc in Path("/proc").iterdir():
+    if not proc.name.isdigit():
+        continue
+    try:
+        args = [
+            x.decode(errors="replace")
+            for x in (proc / "cmdline").read_bytes().split(b"\0") if x
+        ]
+        if not args:
+            continue
+        launchers = [
+            x for x in args[:3]
+            if Path(x).name in {
+                "jupyter-lab", "jupyter-server", "jupyter-notebook"
+            }
+        ]
+        module = (
+            len(args) >= 3
+            and args[1] == "-m"
+            and args[2] in {"jupyterlab", "jupyter_server", "notebook"}
+        )
+        if launchers or module:
+            print("PID:", proc.name)
+            print("Python / entrypoint:", args[0])
+            for launcher in launchers:
+                print("Jupyter launcher:", launcher)
+    except OSError:
+        pass
+PY
