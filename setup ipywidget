@@ -1,3 +1,11 @@
+import ipywidgets as widgets
+from IPython.display import display
+
+display(widgets.FloatProgress(
+    value=5, min=0, max=10, description="Test:"
+))
+
+
 python - <<'PY' # or python3 - <<'PY' 
 from pathlib import Path
 
