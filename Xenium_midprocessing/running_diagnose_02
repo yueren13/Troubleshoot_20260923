@@ -1,0 +1,20 @@
+#first run:
+
+XENIUM_PYTHON="/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/bin/python"
+
+XENIUM_PROJECT="/home/domino/reny28/Projects/Xenium_projects/TBIO-8136/code/xenium_initial_processing"
+
+"$XENIUM_PYTHON" "$XENIUM_PROJECT/step1_process_check.py" check \
+  --project-root "$XENIUM_PROJECT"
+
+
+# if the above works:
+
+"$XENIUM_PYTHON" "$XENIUM_PROJECT/step1_process_check.py" preview \
+  --project-root "$XENIUM_PROJECT"
+
+# if works again, run all:
+
+"$XENIUM_PYTHON" "$XENIUM_PROJECT/step1_process_check.py" preview \
+  --project-root "$XENIUM_PROJECT" \
+  --all
