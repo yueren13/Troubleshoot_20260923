@@ -1,0 +1,47 @@
+/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/spatialdata/_core/query/relational_query.py:531: FutureWarning: functools.partial will be a method descriptor in future Python versions; wrap it in enum.member() if you want to preserve the old behavior
+  left = partial(_left_join_spatialelement_table)
+/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/spatialdata/_core/query/relational_query.py:532: FutureWarning: functools.partial will be a method descriptor in future Python versions; wrap it in enum.member() if you want to preserve the old behavior
+  left_exclusive = partial(_left_exclusive_join_spatialelement_table)
+/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/spatialdata/_core/query/relational_query.py:533: FutureWarning: functools.partial will be a method descriptor in future Python versions; wrap it in enum.member() if you want to preserve the old behavior
+  inner = partial(_inner_join_spatialelement_table)
+/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/spatialdata/_core/query/relational_query.py:534: FutureWarning: functools.partial will be a method descriptor in future Python versions; wrap it in enum.member() if you want to preserve the old behavior
+  right = partial(_right_join_spatialelement_table)
+/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/spatialdata/_core/query/relational_query.py:535: FutureWarning: functools.partial will be a method descriptor in future Python versions; wrap it in enum.member() if you want to preserve the old behavior
+  right_exclusive = partial(_right_exclusive_join_spatialelement_table)
+---------------------------------------------------------------------------
+PermissionError                           Traceback (most recent call last)
+    [... skipping hidden 1 frame]
+
+Cell In[4], line 1
+----> 1 sdata = read_sample(samples.iloc[0]["zarr_path"])
+      2 display(table_inventory(sdata))
+      3 for key, image in sdata.images.items():
+      4     array = next(iter(image["scale0"].data_vars.values())) if hasattr(image, "children") else image
+
+File ~/reny28/Projects/Xenium_projects/TBIO-8136/code/xenium_initial_processing/xenium_workflow/io.py:432, in read_sample(path)
+    430 'Could not get source, probably due dynamically evaluated source code.'
+
+File ~/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/spatialdata/__init__.py:55
+
+File ~/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/spatialdata/_core/operations/rasterize.py:2
+      1 'Could not get source, probably due dynamically evaluated source code.'
+
+File ~/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/datashader/__init__.py:7
+
+File ~/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/datashader/core.py:17
+
+File <frozen importlib._bootstrap>:1360, in _find_and_load(name, import_)
+
+File <frozen importlib._bootstrap>:1334, in _find_and_load_unlocked(name, import_)
+
+File <frozen importlib._bootstrap>:950, in _load_unlocked(spec)
+
+File <frozen importlib._bootstrap_external>:1022, in _LoaderBasics.exec_module(self, module)
+   1020 'Could not get source, probably due dynamically evaluated source code.'
+
+File <frozen importlib._bootstrap_external>:1159, in SourceLoader.get_code(self, fullname)
+
+File <frozen importlib._bootstrap_external>:1217, in FileLoader.get_data(self, path)
+   1214 'Could not get source, probably due dynamically evaluated source code.'
+
+PermissionError: [Errno 1] Operation not permitted: '/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/datashader/resampling.py'
