@@ -1,0 +1,22 @@
+
+Importing: Xenium_run_01__XETG00318__0117167__Region_1__20260904__234830
+/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/spatialdata/_core/query/relational_query.py:531: FutureWarning: functools.partial will be a method descriptor in future Python versions; wrap it in enum.member() if you want to preserve the old behavior
+  left = partial(_left_join_spatialelement_table)
+/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/spatialdata/_core/query/relational_query.py:532: FutureWarning: functools.partial will be a method descriptor in future Python versions; wrap it in enum.member() if you want to preserve the old behavior
+  left_exclusive = partial(_left_exclusive_join_spatialelement_table)
+/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/spatialdata/_core/query/relational_query.py:533: FutureWarning: functools.partial will be a method descriptor in future Python versions; wrap it in enum.member() if you want to preserve the old behavior
+  inner = partial(_inner_join_spatialelement_table)
+/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/spatialdata/_core/query/relational_query.py:534: FutureWarning: functools.partial will be a method descriptor in future Python versions; wrap it in enum.member() if you want to preserve the old behavior
+  right = partial(_right_join_spatialelement_table)
+/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/spatialdata/_core/query/relational_query.py:535: FutureWarning: functools.partial will be a method descriptor in future Python versions; wrap it in enum.member() if you want to preserve the old behavior
+  right_exclusive = partial(_right_exclusive_join_spatialelement_table)
+/opt/tbio/domino_202511/uv-python/cpython-3.13.7-linux-x86_64-gnu/lib/python3.13/functools.py:934: ImplicitModificationWarning: Transforming to str index.
+  return dispatch(args[0].__class__)(*args, **kw)
+WARNING  The `feature_key` column feature_name is categorical with unknown categories. Please ensure the categories
+         are known before calling `PointsModel.parse()` to avoid significant performance implications due to the   
+         need for dask to compute the categories. If you did not use PointsModel.parse() explicitly in your code   
+         (e.g. this message is coming from a reader in `spatialdata_io`), please report this finding.              
+/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/ome_zarr/writer.py:319: FutureWarning: Passing storage-related arguments via **kwargs is deprecated. Please use the 'zarr_store_kwargs' parameter instead. **kwargs will be removed in a future version.
+  da_delayed = da.to_zarr(
+/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/lib/python3.13/site-packages/pims/tiff_stack.py:131: UserWarning: <tifffile.TiffPage 0 @16> reading array from closed file
+  data = t.asarray()
