@@ -1,0 +1,27 @@
+Mechanistic Domain
+Primary Objective
+Key Readouts
+Tumor‑intrinsic: immunogenicity programs
+Assess whether (and in what spatial context) KRAS inhibition increases tumor immune visibility
+MHC‑I/AP machinery; IFN response; immune‑recruiting chemokines; AP‑low immune‑excluded niches; PD-L1 status
+TME: immune architecture (size‑aware)
+Quantify spatial immune distribution beyond abundance
+CD8 density in core/margin/stroma; CD8 penetration index (intratumoral/stromal); inflamed vs excluded vs desert
+TME: T cell functional programs (inferred)
+Determine whether combination improves T cell functional state
+Effector/cytotoxicity vs dysfunction/exhaustion programs; Treg programs; effector:exhaustion ratios by region
+TME: myeloid suppression niches
+Identify suppressive microenvironments limiting response
+TAM polarization continuum; MDSC‑like programs; IL‑10/TGFβ/ARG1‑like suppression
+TME: CAF/ECM barrier programs
+Quantify stromal programs associated with immune exclusion
+CAF programs (myCAF vs iCAF‑like); TGFβ; ECM/collagen remodeling; angiogenesis; hypoxia
+TME: Vascular Remodeling & Immune Accessibility
+Determine whether adagrasib + PD-1 enhances immune access by remodeling vascular-associated tumor niches
+Vascular normalization signatures; endothelial/pericyte markers; hypoxia/VEGF pathways; CD8 infiltration and penetration; T-cell trafficking chemokines; immune-permissive vs immune-excluded vascular niches
+Tumor‑intrinsic: on‑target KRAS biology
+Map where KRAS/MAPK suppression occurs and where it persists – are there differences between treatment groups?
+MAPK output; ERK immediate‑early genes; PI3K/mTOR; RTK/SHP2 feedback; MAPK‑high niche fraction
+Tumor‑intrinsic: state transitions
+Define tumor cell fate changes under Ada ± PD‑1
+Proliferation/cell cycle; quiescence/arrest; ISR/UPR/oxidative stress; EMT‑like programs; glycolysis/OXPHOS/hypoxia
