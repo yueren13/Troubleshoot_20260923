@@ -4,10 +4,10 @@ Two Jupyter notebooks continue the Adagrasib mouse Visium HD T-cell analysis fro
 
 ## Run on EC2
 
-1. Download **08YZ_Tcell_Lineage_Notebooks.zip** from the parent GitHub folder. Extract the whole package inside the CT26 project where 08V ran. Keep both notebooks and the four Python modules together.
+1. Download **08YZ_Tcell_Lineage_Notebooks.zip** from the parent GitHub folder. Extract the whole package inside the CT26 project where 08V ran. Keep both notebooks and the Python modules together.
 2. Open **08Y_Gene_Neighborhoods.ipynb** in the existing project Python kernel and use **Run All**. If the project is elsewhere, set `PROJECT_ROOT` in its first code cell to the code directory containing `ct26_analysis_config.json` and `inputs/pipeline_config.json`, or to the analysis directory containing `14_tcell_ratio_subclustering`.
 3. Open **08Z_UCell_Lineage_and_State.ipynb** in a fresh kernel and use **Run All**. It locates the completed discovery run under the same `OUTPUT_ROOT` and reopens its recorded inputs. If you changed `OUTPUT_ROOT` in 08Y, use that path in 08Z as well. Set `DISCOVERY_DIR` to select a specific older run.
-4. Open the 08Z per-mouse validation and coverage tables. The last cell writes a compact `08YZ_review_*.zip` containing aggregate tables and figures for follow-up. The full `per_cell_annotations.csv.gz` stays in the 08Z output directory.
+4. Open the 08Z per-mouse validation and coverage tables. The final cell of each notebook places a clickable `*_return_to_chat_*.zip` beside the notebook with aggregate tables, figures and an HTML index. You can run that cell alone against existing results. The earlier combined ZIP also remains under `08YZ_results/`. The full `per_cell_annotations.csv.gz` stays in the 08Z output directory.
 
 The CPU path uses Python, NumPy, pandas, SciPy, scikit-learn, h5py, anndata, matplotlib and IPython. The gene UMAP and Leiden partition additionally use `umap-learn`, `igraph` and `leidenalg`. If those three packages are missing, install them with `%pip install umap-learn igraph leidenalg` in the selected notebook kernel and restart it. The discovery report identifies the projection and clustering algorithms actually used. A fallback uses the first two gene PCs or graph-constrained Ward clustering when the corresponding optional dependency is unavailable. The scoring module implements the positive UCell statistic on sparse matrix chunks.
 
