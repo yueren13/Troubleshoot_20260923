@@ -6,6 +6,7 @@ import hashlib
 import inspect
 import json
 import os
+import sys
 import time
 import zipfile
 from pathlib import Path
@@ -252,6 +253,52 @@ def _freeze_zip(dest,files,target):
     os.replace(tmp,target)
 
 
+def _prepare_gpu(torch, runtime):
+    # Lightning and ResolVI's auto-selected prediction paths use the first visible GPU.
+    # This index is local to the kernel, including when CUDA_VISIBLE_DEVICES is set.
+    device = torch.device("cuda:0")
+    runtime.update(logical_device=str(device), cuda_probe_succeeded=False,
+                   cuda_visible_devices=os.environ.get("CUDA_VISIBLE_DEVICES"))
+    try:
+        runtime["cuda_available"] = torch.cuda.is_available()
+        runtime["visible_device_count"] = torch.cuda.device_count()
+        if not runtime["cuda_available"] or runtime["visible_device_count"] < 1:
+            raise RuntimeError("PyTorch cannot see a usable CUDA device.")
+        # A tensor allocation initializes the allocator. Reading the result back to the CPU
+        # also verifies that this kernel can run a CUDA operation before fitting either model.
+        result = torch.ones(1, device=device).add_(1).item()
+        if result != 2:
+            raise RuntimeError(f"The CUDA test returned {result!r}, expected 2.")
+        runtime["cuda_probe_succeeded"] = True
+    except (RuntimeError, AssertionError, ValueError) as exc:
+        raise RuntimeError(
+            f"09B could not run a one-element tensor on {device}. Check the GPU assignment "
+            "and CUDA-enabled PyTorch in this notebook kernel. See runtime.json in the "
+            f"diagnostic ZIP. PyTorch reported: {exc}"
+        ) from exc
+
+    try:
+        runtime["gpu"] = torch.cuda.get_device_name(device)
+    except (RuntimeError, ValueError, AttributeError) as exc:
+        runtime["gpu_name_error"] = str(exc)
+    try:
+        torch.cuda.reset_peak_memory_stats(device)
+    except (RuntimeError, ValueError, AttributeError) as exc:
+        # Peak allocation is optional telemetry. A failed reset invalidates the run-specific peak.
+        runtime["peak_reset_error"] = str(exc)
+        print(f"GPU compute check passed. Peak memory reporting is unavailable: {exc}", flush=True)
+    return device
+
+
+def _record_gpu_peak(torch, device, runtime):
+    runtime["peak_gpu_allocated_GiB"] = None
+    if "peak_reset_error" not in runtime:
+        try:
+            runtime["peak_gpu_allocated_GiB"] = round(torch.cuda.max_memory_allocated(device) / GIB, 3)
+        except (RuntimeError, ValueError, AttributeError) as exc:
+            runtime["peak_read_error"] = str(exc)
+
+
 def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,section=None,
         center_um=None,microns_per_unit=1.0,n_features=1200,n_neighbors=8,batch_size=64,
         epochs=40,latent_dim=16,resolution=0.6,min_model_counts=5,run_scvi=True,
@@ -263,8 +310,8 @@ def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,
     from scvi.external import RESOLVI
     if not all(k in inspect.signature(RESOLVI.setup_anndata).parameters for k in ["prepare_data","batch_key"]):
         raise RuntimeError("This package expects the documented scvi.external.RESOLVI setup API.")
-    if accelerator not in {"cpu","gpu"} or (accelerator=="gpu" and not torch.cuda.is_available()):
-        raise RuntimeError("Select a GPU-enabled project kernel, or explicitly set accelerator='cpu' for a test.")
+    if accelerator not in {"cpu","gpu"}:
+        raise ValueError("accelerator must be 'gpu' or 'cpu'.")
     if min(target_core_cells,epochs,n_features,batch_size,marker_cell_cap)<1 or n_neighbors<6 or not 2<=latent_dim<100:
         raise ValueError("Check positive settings, n_neighbors >=6 and latent_dim between 2 and 99.")
     if min_model_counts<1 or microns_per_unit<=0 or halo_um<0 or block_um<=0:raise ValueError("Invalid spatial or count settings.")
@@ -277,7 +324,7 @@ def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,
     root.mkdir(parents=True,exist_ok=True)
     dest=root/("09B_"+rid)
     review=root/f"09B_return_to_chat_{rid}.zip"
-    files=["complete.json","settings.json","embedding_comparison.csv","marker_controls.csv",
+    files=["complete.json","settings.json","runtime.json","embedding_comparison.csv","marker_controls.csv",
            "mixture_by_cell_type.csv","specificity_and_distance.csv","spatial_leiden.png","marker_controls.png","model_genes.csv","training_history.csv"]
     if (dest/"complete.json").is_file():
         if not review.is_file(): _freeze_zip(dest,files,review)
@@ -286,10 +333,19 @@ def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,
     import tempfile
     stage=Path(tempfile.mkdtemp(prefix="09B_work_",dir=root))
     started=time.monotonic()
+    runtime = dict(accelerator=accelerator, python=sys.version.split()[0],
+                   torch=str(torch.__version__), cuda_build=torch.version.cuda,
+                   scvi_tools=config["scvi"])
     try:
         (stage/"settings.json").write_text(json.dumps(config,indent=2,default=str))
+        device = None
+        model_devices = 1  # Lightning uses a device count for CPU.
+        if accelerator == "gpu":
+            device = _prepare_gpu(torch, runtime)
+            model_devices = [device.index]
+        (stage/"runtime.json").write_text(json.dumps(runtime,indent=2))
+        print("09B runtime",json.dumps(runtime),flush=True)
         scvi.settings.seed=seed
-        if accelerator=="gpu": torch.cuda.reset_peak_memory_stats(0)
         rng=np.random.default_rng(seed)
         b=ad.read_h5ad(path,backed="r")
         try:
@@ -360,7 +416,7 @@ def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,
             simple=scvi.model.SCVI(a,n_latent=latent_dim,n_hidden=64)
             fit_start=time.monotonic()
             simple.train(max_epochs=epochs,batch_size=batch_size,train_size=1.0,
-                         accelerator=accelerator,devices=1,enable_progress_bar=False)
+                         accelerator=accelerator,devices=model_devices,enable_progress_bar=False)
             log["scvi_fit_minutes"]=round((time.monotonic()-fit_start)/60,3)
             embed["scVI"]=simple.get_latent_representation(batch_size=batch_size)
             pred=simple.get_normalized_expression(indices=select,gene_list=marker_names.tolist(),library_size=10000,
@@ -373,7 +429,7 @@ def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,
         RESOLVI.setup_anndata(a,prepare_data=False)
         rv=RESOLVI(a,n_latent=latent_dim,n_hidden=64,semisupervised=False)
         fit_start=time.monotonic()
-        rv.train(max_epochs=epochs,batch_size=batch_size,accelerator=accelerator,device=1,
+        rv.train(max_epochs=epochs,batch_size=batch_size,accelerator=accelerator,device=model_devices,
                  n_epochs_kl_warmup=max(1,min(20,epochs//2)),enable_progress_bar=False)
         log["resolvi_fit_minutes"]=round((time.monotonic()-fit_start)/60,3)
         embed["ResolVI"]=rv.get_latent_representation(batch_size=batch_size)
@@ -387,7 +443,7 @@ def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,
         # Upstream Pyro inference can be expensive. Limit mixture sampling to a fixed diagnostic cohort.
         midx=np.sort(rng.choice(select,min(1000,len(select)),replace=False))
         mix=rv.sample_posterior(indices=midx,return_sites=["mixture_proportions"],num_samples=3,
-             batch_size=batch_size,accelerator=accelerator,device=1,return_samples=False,summary_frequency=1)
+             batch_size=batch_size,accelerator=accelerator,device=model_devices,return_samples=False,summary_frequency=1)
         fractions=np.asarray(mix["post_sample_means"]["mixture_proportions"]).reshape(len(midx),3)
         mass=fractions.sum(axis=1)
         if not np.isfinite(fractions).all() or (fractions<0).any() or (mass<=0).any():
@@ -415,8 +471,11 @@ def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,
         assignments.to_csv(stage/"local_cell_assignments.csv.gz",index=False)
         _write_report(stage,pd.DataFrame(metrics),pd.DataFrame(signals),labels,coords,core,seed)
         log["minutes"]=round((time.monotonic()-started)/60,2)
-        if accelerator=="gpu":
-            log["gpu"]=torch.cuda.get_device_name(0);log["peak_gpu_allocated_GiB"]=round(torch.cuda.max_memory_allocated(0)/GIB,3)
+        if device is not None:
+            _record_gpu_peak(torch, device, runtime)
+            log["gpu"] = runtime.get("gpu")
+            log["peak_gpu_allocated_GiB"] = runtime["peak_gpu_allocated_GiB"]
+            (stage/"runtime.json").write_text(json.dumps(runtime,indent=2))
         log["type_patterns"]=patterns;log["diagnostic_marker_cells"]=len(select)
         log["diagnostic_mixture_cells"]=len(midx)
         (stage/"complete.json").write_text(json.dumps(log,indent=2))
@@ -425,11 +484,13 @@ def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,
         _freeze_zip(dest,files,review)
         print("09B aggregate review ZIP:",review,flush=True)
         return dest,review
-    except Exception:
+    except Exception as exc:
         import traceback
         if stage.exists():
             (stage/"error.txt").write_text(traceback.format_exc())
+            (stage/"runtime.json").write_text(json.dumps(runtime,indent=2))
             failure=root/(stage.name+"_diagnostics.zip")
-            _freeze_zip(stage,["settings.json","error.txt","model_genes.csv","training_history.csv"],failure)
+            _freeze_zip(stage,["settings.json","runtime.json","error.txt","model_genes.csv","training_history.csv"],failure)
+            exc.diagnostics_zip = failure
             print("09B diagnostic ZIP:",failure,flush=True)
         raise
