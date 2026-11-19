@@ -299,6 +299,21 @@ def _record_gpu_peak(torch, device, runtime):
             runtime["peak_read_error"] = str(exc)
 
 
+def _training_batch_size(n_cells, requested):
+    """Use the largest allowed fixed batch size that keeps at least two cells per step."""
+    if not isinstance(requested, (int, np.integer)) or requested < 2:
+        raise ValueError("batch_size must be an integer of at least 2 for batch normalization.")
+    if n_cells < 2:
+        raise ValueError("At least two model-eligible cells are needed for batch normalization.")
+    for size in range(min(int(requested), n_cells), 1, -1):
+        if n_cells % size != 1:
+            return size
+    raise ValueError(
+        f"No fixed batch size from 2 through {requested} can partition {n_cells} cells "
+        "without a one-cell batch. Increase batch_size to allow a larger minibatch."
+    )
+
+
 def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,section=None,
         center_um=None,microns_per_unit=1.0,n_features=1200,n_neighbors=8,batch_size=64,
         epochs=40,latent_dim=16,resolution=0.6,min_model_counts=5,run_scvi=True,
@@ -377,9 +392,20 @@ def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,
             measured=names[chosen];coords=xy[fit_rows];secs=secs[fit_rows]
         finally:b.file.close()
         if len(obs)<max(35,latent_dim+2):raise ValueError("Too few model-eligible cells.")
+        # Spatial halo and count filtering both affect the 100% training split used by each model.
+        n_fit = len(obs)
+        batch_plan = {"fitted_cells": n_fit}
+        runtime["training_batches"] = batch_plan
+        train_batch_size = _training_batch_size(n_fit, batch_size)
+        full_batches, remainder = divmod(n_fit, train_batch_size)
+        batch_plan.update(requested_batch_size=int(batch_size),
+                          effective_batch_size=train_batch_size,
+                          batches_per_epoch=full_batches + bool(remainder),
+                          final_batch_cells=remainder or train_batch_size)
+        (stage/"runtime.json").write_text(json.dumps(runtime,indent=2))
         log=dict(source_cells=int(len(xy)),fitted_cells=len(obs),below_minimum_model_counts=int((~keep).sum()),
                  gene_selection_cells=len(lookup_rows),training_genes=len(measured),geometry=geometry,
-                 original_core=int(core.sum()),withheld_direct_genes=list(HOLD))
+                 original_core=int(core.sum()),withheld_direct_genes=list(HOLD),training_batches=batch_plan)
         nbr,dist=_spatial_graph(coords,secs,n_neighbors)
         if mode=="tile" and not geometry["entire_section"]:
             radial=np.linalg.norm(coords-np.asarray(geometry["center_um"]),axis=1)
@@ -415,7 +441,7 @@ def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,
             scvi.model.SCVI.setup_anndata(a)
             simple=scvi.model.SCVI(a,n_latent=latent_dim,n_hidden=64)
             fit_start=time.monotonic()
-            simple.train(max_epochs=epochs,batch_size=batch_size,train_size=1.0,
+            simple.train(max_epochs=epochs,batch_size=train_batch_size,train_size=1.0,
                          accelerator=accelerator,devices=model_devices,enable_progress_bar=False)
             log["scvi_fit_minutes"]=round((time.monotonic()-fit_start)/60,3)
             embed["scVI"]=simple.get_latent_representation(batch_size=batch_size)
@@ -429,7 +455,7 @@ def run(h5ad_path,output_root,*,mode="tile",target_core_cells=12000,halo_um=100,
         RESOLVI.setup_anndata(a,prepare_data=False)
         rv=RESOLVI(a,n_latent=latent_dim,n_hidden=64,semisupervised=False)
         fit_start=time.monotonic()
-        rv.train(max_epochs=epochs,batch_size=batch_size,accelerator=accelerator,device=model_devices,
+        rv.train(max_epochs=epochs,batch_size=train_batch_size,accelerator=accelerator,device=model_devices,
                  n_epochs_kl_warmup=max(1,min(20,epochs//2)),enable_progress_bar=False)
         log["resolvi_fit_minutes"]=round((time.monotonic()-fit_start)/60,3)
         embed["ResolVI"]=rv.get_latent_representation(batch_size=batch_size)
