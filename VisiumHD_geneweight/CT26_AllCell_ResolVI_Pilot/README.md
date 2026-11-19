@@ -13,9 +13,20 @@ Run **09C_PCA_Cluster_Audit.ipynb** beside 09B in the same Python kernel. It rea
 
 ## Native squares and SPARKLE in the 09B region
 
-1. Open a JupyterLab terminal in the extracted package and run `bash setup_09d_sparkle.sh`. The script uses a dedicated Python environment, installs the published `stambient==0.1.4`, tests its CPU fitter, and registers **CT26 SPARKLE 0.1.4 (CPU)**. The pinned scientific stack requires Python 3.11 or newer. If needed, select a suitable interpreter with `CT26_PYTHON=/path/to/python3.11 bash setup_09d_sparkle.sh`.
-2. Open **09D_Native_Bins_and_SPARKLE.ipynb**, select that kernel, and run all cells. The default uses the completed Ada-14R tile `09B_4403598b0ac3` and its prepared H5AD. If you moved the pilot, set `RUN_DIR` to its completed directory and keep the sibling `inputs/` folder with the prepared H5AD.
-3. Download `09D_return_to_chat_*.zip` from the link beside the notebook. It contains the source and status receipts, native coverage and marker tables, two figures after a successful fit, and a traceback for a recoverable error. Cell-level output stays under the new `09_pilot_results/09D_*` directory. The local `sparkle_targeted_counts.npz` stores the targeted observed and corrected gene-by-cell matrices, feature and cell IDs, and a core-cell flag.
+**Use your TBIO-8057 spatial environment as the starting point.** In a JupyterLab terminal, change to the extracted package folder and run
+
+```bash
+bash setup_09d_sparkle.sh --from-python \
+  /home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/bin/python
+```
+
+Select **CT26 SPARKLE 0.1.4 (spatial CPU)** in **09D_Native_Bins_and_SPARKLE.ipynb** and choose **Run All**. The installer reads the Python build and versions of the scientific and Jupyter packages used by 09D from the supplied environment. It installs those versions, adds the pilot's tested versions for missing dependencies, and fits a small synthetic dataset with `stambient==0.1.4` before registering the kernel. The new environment has its own packages. The GPU project's other tools, such as CUDA-enabled PyTorch and scVI, remain available through your usual kernel.
+
+**Use the pilot's pinned environment.** Run `bash setup_09d_sparkle.sh` and select **CT26 SPARKLE 0.1.4 (CPU)**. To choose the Python build while using the pilot's package versions, run `CT26_PYTHON=/path/to/python bash setup_09d_sparkle.sh`. This also provides an independent setup if the spatial project's package versions are incompatible with 09D.
+
+The default analysis uses the completed Ada-14R tile `09B_4403598b0ac3` and its prepared H5AD. If you moved the pilot, set `RUN_DIR` to its completed directory and keep the sibling `inputs/` folder with the prepared H5AD.
+
+Download `09D_return_to_chat_*.zip` from the link beside the notebook. It contains the source and status receipts, native coverage and marker tables, two figures after a successful fit, and a traceback for a recoverable error. Cell-level output stays under the new `09_pilot_results/09D_*` directory. The local `sparkle_targeted_counts.npz` stores the targeted observed and corrected gene-by-cell matrices, feature and cell IDs, and a core-cell flag.
 
 ### Where the original Ada-14R inputs were recorded
 
