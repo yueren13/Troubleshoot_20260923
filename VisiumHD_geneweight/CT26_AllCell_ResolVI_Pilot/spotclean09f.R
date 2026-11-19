@@ -5,7 +5,10 @@
 # native grid 1 array step = 2 um. No slide image is an input to the fit.
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 2L) stop("Usage: spotclean09f.R INPUT_DIR|--smoke OUTPUT_DIR")
+regional <- length(args) == 3L && identical(args[3], "--09g-shared-plan")
+if ((!regional && length(args) != 2L) || (regional && identical(args[1], "--smoke"))) {
+    stop("Usage: spotclean09f.R INPUT_DIR|--smoke OUTPUT_DIR [--09g-shared-plan]")
+}
 minor <- paste(R.version$major, strsplit(R.version$minor, ".", fixed = TRUE)[[1]][1], sep = ".")
 lib <- path.expand(Sys.getenv("SPOTCLEAN_R_LIB", file.path("~/.local/share/ct26/R", minor, "spotclean")))
 .libPaths(c(lib, .libPaths()))
@@ -65,7 +68,8 @@ run_fit <- function(dat, out, smoke) {
         any(!nzchar(pos$barcode)) || anyDuplicated(genes$gene) || anyDuplicated(pos$barcode)) {
         stop("Matrix dimensions and unique TSV IDs must agree.")
     }
-    if (nrow(pos) > 2500L) stop("09F supports a native ROI of at most 2,500 positions.")
+    limit <- if (regional) 4096L else 2500L
+    if (nrow(pos) > limit) stop("Native window exceeds this pilot's ", limit, "-position limit.")
     if (sum(tissue) < 2L || sum(!tissue) < 2L) stop("SpotClean needs both tissue and background positions.")
     if (any(!is.finite(counts@x)) || any(counts@x < 0 | counts@x != floor(counts@x))) {
         stop("SpotClean requires nonnegative raw integer counts.")
@@ -97,6 +101,18 @@ run_fit <- function(dat, out, smoke) {
     # Include abundant references as well as every expressed target.
     ordered <- positive[order(-tissue_total[positive], genes$gene[positive])]
     fit_idx <- union(head(ordered, 200L), which(genes$target == 1L & tissue_total > 0))
+    if (regional) {
+        plan <- read_tsv(file.path(out, "shared_plan.tsv"))
+        if (!"gene" %in% names(plan) || anyDuplicated(plan$gene) || !length(plan$gene)) {
+            stop("Invalid 09G spatial gene panel.")
+        }
+        fit_idx <- match(plan$gene, genes$gene)
+        if (anyNA(fit_idx) || any(tissue_total[fit_idx] <= 0) ||
+            !all(which(genes$target == 1L & tissue_total > 0) %in% fit_idx) ||
+            length(fit_idx) > 200L + sum(genes$target == 1L)) {
+            stop("09G spatial panel differs from the expressed targets and reference gene plan.")
+        }
+    }
     if (length(fit_idx) < 2L ||
         sum(Matrix::colSums(counts[fit_idx, tissue, drop = FALSE]) > 0) < 2L) {
         stop("Insufficient positive tissue sources or expressed genes for SpotClean.")
