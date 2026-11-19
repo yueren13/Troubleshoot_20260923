@@ -1,3 +1,4 @@
+#/home/domino/reny28/Projects/Visium_projects/TBIO-8057/env/gpu_env/.venv/bin/python
 #!/usr/bin/env bash
 # Install the CPU SPARKLE notebook kernel from a JupyterLab terminal:
 #   bash setup_09d_sparkle.sh
