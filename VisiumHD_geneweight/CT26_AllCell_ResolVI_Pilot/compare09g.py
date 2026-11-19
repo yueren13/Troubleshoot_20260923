@@ -17,9 +17,11 @@ RETAIN_COLS = ["region", "group", "panel", "genes", "cells", "raw_UMIs", "raw_po
 POOL_COLS = ["group", "panel", "genes", "paired_regions", "region_names", "cells", "raw_UMIs",
              "sparkle_counts", "sparkle_retention", "spotclean_counts", "spotclean_retention"]
 COVER_COLS = ["region", "gene", "assayed", "raw_assigned_all", "raw_unassigned_all", "raw_complete",
-              "sparkle_status", "sparkle_complete_counts", "spotclean_status", "spotclean_complete_counts"]
+              "sparkle_status", "sparkle_complete_counts", "spotclean_status", "spotclean_complete_counts", "bin_scope"]
 STATUS_COLS = ["region","sample","native_positions","provisional_background","complete_cells",
-               "macrophage_cells","near_panT_cells","input_sha256","sparkle","spotclean","pool_eligible"]
+               "macrophage_cells","near_panT_cells","input_sha256","sparkle","spotclean","pool_eligible",
+               "analysis_mode","evaluation_positions","owned_prior_cells","disk_positions_reference",
+               "prior_cells_reference"]
 
 
 def _load_model(folder, method, digest, hashes, genes, raw_cells, raw_counts):
@@ -124,6 +126,8 @@ def _plot(regional, out):
                 ratio = row[m + "_retention"]
                 if pd.notna(ratio):
                     ax.scatter(100*ratio,j+dy,label=m,s=42,color=colors[m])
+        if not sub[["sparkle_retention","spotclean_retention"]].notna().any().any():
+            ax.text(.5,.08,"No measured retention ratios", transform=ax.transAxes, ha="center", fontsize=9)
         ax.axvline(100,ls="--",color="#727272",lw=1)
         ax.set_yticks(range(len(labels)), labels if i==0 else [""]*len(labels), fontsize=9)
         ax.set_ylim(len(labels)-.5, -.5)
@@ -136,6 +140,99 @@ def _plot(regional, out):
                    loc="outside upper center",ncols=2,frameon=False)
     fig.savefig(out/"paired_retention.png",dpi=155,bbox_inches="tight")
     plt.close(fig)
+
+
+def _owned_cells(meta, pos, receipt, name):
+    """Verify complete 09B footprints independently of central-bin ownership."""
+    required = {"owner_tile", "prior_09b_core", "complete_core",
+                "n_footprint_bins_reference", "n_footprint_bins_tile"}
+    if not required.issubset(meta):
+        raise ValueError(f"The fixed-core input lacks ownership metadata: {sorted(required - set(meta))}")
+    assigned = pos.loc[pos.cell_id.ne("")]
+    sizes = assigned.groupby("cell_id").size().reindex(meta.index, fill_value=0)
+    tile_sizes = pd.to_numeric(meta.n_footprint_bins_tile, errors="raise")
+    original_sizes = pd.to_numeric(meta.n_footprint_bins_reference, errors="raise")
+    if not sizes.eq(tile_sizes).all():
+        raise ValueError("A tile's footprint counts disagree with its native cell assignments.")
+    core = meta.index[_flag(meta.complete_core)]
+    represented = (meta.owner_tile.eq(name) & _flag(meta.prior_09b_core) &
+                   sizes.gt(0) & sizes.eq(original_sizes) &
+                   assigned.groupby("cell_id").in_tissue.all().reindex(meta.index, fill_value=False))
+    if not represented.loc[core].all() or len(core) != receipt["n_complete_cells"]:
+        raise ValueError("An original 09B cell lacks unique ownership or a complete measured tissue footprint.")
+    if int(pos.in_core.sum()) != receipt["n_owned_disk_bins"]:
+        raise ValueError("Native disk-bin ownership disagrees with the tile receipt.")
+    return core
+
+
+def _disk_tables(out, status, regional, scores):
+    """Report paired and individual fit coverage against the fixed biological target."""
+    if (status["disk_positions_reference"].nunique() != 1 or status["prior_cells_reference"].nunique() != 1
+            or status["sample"].nunique() != 1):
+        raise ValueError("Fixed tiles have inconsistent sample or reference counts.")
+    scope = {"reviewed": pd.Series(True, index=status.index),
+             "SPARKLE": status.sparkle.eq("verified"),
+             "SpotClean": status.spotclean.eq("verified"),
+             "paired": status.sparkle.eq("verified") & status.spotclean.eq("verified")}
+    disk = int(status.disk_positions_reference.iloc[0])
+    cells = int(status.prior_cells_reference.iloc[0])
+    coverage = []
+    marker = []
+    for label, active in scope.items():
+        contributing = status.loc[active]
+        n_bins = int(contributing.evaluation_positions.sum())
+        n_prior = int(contributing.owned_prior_cells.sum())
+        n_complete = int(contributing.complete_cells.sum())
+        if n_bins > disk or n_prior > cells or n_complete > n_prior:
+            raise ValueError("Summed tile coverage exceeds the fixed disk or its original cell count.")
+        coverage.append(dict(scope=label, tiles=len(contributing),
+                             reference_disk_bins=disk, reviewed_owned_disk_bins=n_bins,
+                             reference_prior_cells=cells, prior_cells_with_owner_in_tiles=n_prior,
+                             whole_footprints=n_complete,
+                             whole_footprints_fraction_of_prior=n_complete/cells if cells else np.nan))
+        part = regional.loc[regional.region.isin(contributing.region)]
+        for group, panel, genes in regional.groupby(["group","panel","genes"], sort=False).groups:
+            use = part.loc[part.group.eq(group) & part.panel.eq(panel) & part.genes.eq(genes)]
+            if label == "paired":
+                use = use.loc[use.both_available]
+            elif label in ("SPARKLE", "SpotClean"):
+                use = use.loc[use[label.lower()+"_counts"].notna()]
+            use = use.loc[use.raw_UMIs.notna()]
+            raw = use.raw_UMIs.sum(min_count=1)
+            item = dict(scope=label, group=group, panel=panel, genes=genes, tiles_with_measured_cells=len(use),
+                        cells=int(use.cells.sum()), raw_UMIs=raw)
+            for m in METHODS:
+                report = label == "paired" or label.lower() == m
+                count = use[m+"_counts"].sum(min_count=1) if report else np.nan
+                item[m+"_counts"] = count
+                item[m+"_retention"] = count/raw if raw > 0 else np.nan
+            marker.append(item)
+    fraction = status.provisional_background / status.native_positions
+    sensitivity = []
+    for label, flag in (("below_25_percent", fraction.lt(.25)),
+                        ("at_least_25_percent", fraction.ge(.25))):
+        selected = status.loc[flag]
+        results = _pool(regional, selected.region)
+        for group, panel, _ in REVIEW:
+            template = regional.loc[regional.group.eq(group) & regional.panel.eq(panel)].iloc[0]
+            match = results.loc[results.group.eq(group) & results.panel.eq(panel)]
+            row = dict(background_fraction_band=label, prepared_tiles=len(selected), group=group, panel=panel,
+                       genes=template.genes, paired_regions=0, cells=0, raw_UMIs=np.nan,
+                       sparkle_counts=np.nan, spotclean_counts=np.nan,
+                       sparkle_retention=np.nan, spotclean_retention=np.nan)
+            if len(match):
+                row.update(match.iloc[0].drop(labels="region_names").to_dict())
+            sensitivity.append(row)
+    pd.DataFrame(sensitivity).to_csv(out/"background_sensitivity.csv", index=False)
+    frame = pd.DataFrame(coverage)
+    frame.to_csv(out/"domain_coverage.csv", index=False)
+    pd.DataFrame(marker).to_csv(out/"method_coverage.csv", index=False)
+    by_score = scores.groupby(["gene", "assayed", "assignment", "he_score"], sort=False)
+    totals = by_score[["n_squares","raw_total_UMIs","raw_marker_UMIs"]].sum(min_count=1).reset_index()
+    totals["raw_marker_per_1000_UMIs"] = (1000 * totals.raw_marker_UMIs /
+                                         totals.raw_total_UMIs.where(totals.raw_total_UMIs.gt(0)))
+    totals.to_csv(out/"coreceptors_disk_by_score.csv", index=False)
+    return frame
 
 
 def compare_regions(regions, output_dir):
@@ -151,6 +248,8 @@ def compare_regions(regions, output_dir):
     local.mkdir(exist_ok=True)
     summaries, coverage, outside, statuses, edge_rows = [], [], [], [], []
     seen_spots, seen_cells, names = set(), set(), set()
+    fixed = None
+    reference = None
     for region in regions:
         name = str(region["name"])
         if name in names or Path(name).name != name or name in {"", ".", ".."}:
@@ -158,6 +257,10 @@ def compare_regions(regions, output_dir):
         names.add(name)
         src = Path(region["input"])
         receipt = json.loads((src/"roi_receipt.json").read_text())
+        current_fixed = receipt.get("analysis_mode") == "09B_fixed_core"
+        if fixed is not None and current_fixed != fixed:
+            raise ValueError("A pooled readout must use one evaluation design.")
+        fixed = current_fixed
         native_genes, pos, meta, native = _input(src)
         digest, file_hashes = input_digest(src)
         targets = native_genes[native_genes.isin(TARGETS)]
@@ -167,14 +270,25 @@ def compare_regions(regions, output_dir):
         target_counts = native[native_genes.get_indexer(targets)]
         raw_counts = (target_counts[:,keep.to_numpy()] @ weights).toarray()
         raw = pd.DataFrame(raw_counts.T,index=cell_ids,columns=targets)
-        support = pos.loc[keep].groupby("cell_id")[["in_tissue","in_core"]].all().all(axis=1)
-        core = meta.index[_flag(meta.complete_core) & support.reindex(meta.index,fill_value=False)]
+        if fixed:
+            signature = (receipt["sample"], receipt.get("run_dir"), tuple(targets))
+            if reference is not None and signature != reference:
+                raise ValueError("The original 09B run, sample or target gene axis differs across fixed tiles.")
+            reference = signature
+            core = _owned_cells(meta, pos, receipt, name)
+        else:
+            support = pos.loc[keep].groupby("cell_id")[["in_tissue","in_core"]].all().all(axis=1)
+            core = meta.index[_flag(meta.complete_core) & support.reindex(meta.index,fill_value=False)]
         cells = meta.loc[core].copy()
         observed = raw.loc[core]
         fitted, states, available, receipts = {}, {}, {}, {}
         region_stat = dict(region=name, sample=receipt["sample"], native_positions=len(pos),
                            provisional_background=int((~pos.in_tissue).sum()), complete_cells=len(cells),
-                           input_sha256=digest)
+                           input_sha256=digest, evaluation_positions=int(pos.in_core.sum()),
+                           analysis_mode="09B_fixed_core" if fixed else "qualified_regions",
+                           owned_prior_cells=receipt.get("n_owned_target_cells"),
+                           disk_positions_reference=receipt.get("n_disk_bins_reference"),
+                           prior_cells_reference=receipt.get("n_prior_cells_reference"))
         for m in METHODS:
             available[m] = False
             fitted[m] = pd.DataFrame(np.nan, index=core, columns=targets)
@@ -193,11 +307,12 @@ def compare_regions(regions, output_dir):
             available[m] = True
             region_stat[m] = "verified"
 
-        all_totals = np.asarray(target_counts.sum(axis=1)).ravel()
-        assigned_totals = raw_counts.sum(axis=1)
+        scope = pos.in_core.to_numpy(bool) if fixed else np.ones(len(pos), dtype=bool)
+        all_totals = np.asarray(target_counts[:, scope].sum(axis=1)).ravel()
+        assigned_totals = np.asarray(target_counts[:, scope & keep.to_numpy()].sum(axis=1)).ravel()
         for gene in sorted(TARGETS):
             j = targets.get_indexer([gene])[0]
-            item = dict(region=name,gene=gene,assayed=j>=0,
+            item = dict(region=name,gene=gene,assayed=j>=0,bin_scope="owned_disk" if fixed else "fit_window",
                         raw_assigned_all=assigned_totals[j] if j>=0 else np.nan,
                         raw_unassigned_all=all_totals[j]-assigned_totals[j] if j>=0 else np.nan,
                         raw_complete=observed[gene].sum(min_count=1) if j>=0 else np.nan)
@@ -233,11 +348,14 @@ def compare_regions(regions, output_dir):
         cells.to_csv(local/(name+"_cells.csv.gz"))
         # Overlapping physical support would double count regions in a pooled estimate.
         sample = str(receipt["sample"])
-        spot_keys = {(sample, b) for b in pos.index}
+        bin_ids = pos.index[pos.in_core] if fixed else pos.index
+        spot_keys = {(sample, b) for b in bin_ids}
         cell_keys = {(sample, c) for c in core}
         eligible = not (spot_keys & seen_spots or cell_keys & seen_cells)
         region_stat["pool_eligible"] = eligible
-        if eligible and all(available.values()):
+        if fixed and not eligible:
+            raise ValueError("Repeated disk-bin or complete-cell owner across fixed 09B tiles.")
+        if eligible and (fixed or all(available.values())):
             seen_spots.update(spot_keys)
             seen_cells.update(cell_keys)
         statuses.append(region_stat)
@@ -255,8 +373,18 @@ def compare_regions(regions, output_dir):
     status.to_csv(out/"region_status.csv",index=False)
     pd.DataFrame(coverage,columns=COVER_COLS).to_csv(out/"marker_gene_coverage.csv",index=False)
     if outside:
-        pd.concat(outside,ignore_index=True).to_csv(out/"coreceptors_by_score.csv",index=False)
-    _plot(regional,out)
+        scores = pd.concat(outside,ignore_index=True)
+        scores.to_csv(out/"coreceptors_by_score.csv",index=False)
+    if fixed:
+        area = _disk_tables(out, status, regional, scores).set_index("scope")
+        # One fixed biological region may have hundreds of local fits. Show the
+        # count-weighted paired estimates in one panel, with all tile rows in CSV.
+        endpoints = pd.DataFrame([dict(group=g,panel=p) for g,p,_ in REVIEW])
+        plot = endpoints.merge(pooled, on=["group","panel"], how="left", validate="one_to_one")
+        plot["region"] = "09B core · paired tiles"
+        _plot(plot, out)
+    else:
+        _plot(regional,out)
     lines = ["# Side-by-side correction on complete Proseg footprints","","Percentages divide each method’s "
              "summed corrected marker counts by observed counts on the same cells, genes and native squares. "
              "SpotClean can return values above 100%. A dash indicates unavailable data or zero observed counts.","",
@@ -267,7 +395,23 @@ def compare_regions(regions, output_dir):
         if pd.isna(v):
             return "—"
         return f"{100*v:.1f}%" if fraction else f"{v:,.0f}"
-    for row in regional.itertuples():
+    if fixed:
+        reviewed, paired = area.loc["reviewed"], area.loc["paired"]
+        lines = ["# Original 09B evaluation core", "",
+                 f"Readout covers {int(reviewed.reviewed_owned_disk_bins):,} of "
+                 f"{int(reviewed.reference_disk_bins):,} native disk positions and "
+                 f"{int(reviewed.whole_footprints):,} complete footprints from "
+                 f"{int(reviewed.reference_prior_cells):,} original evaluation cells. "
+                 f"Both methods returned verified outputs on {int(paired.tiles)} tiles containing "
+                 f"{int(paired.whole_footprints):,} complete footprints. "
+                 "An individual marker row can have a smaller denominator.", "",
+                 "Native RNA totals use uniquely owned squares inside the disk. Cell totals use each "
+                 "owned complete footprint, including bins extending across tile cores or the disk boundary. "
+                 "The method coverage table gives raw and corrected counts for each method's available "
+                 "tiles and for the shared subset. The background sensitivity table compares results "
+                 "on tiles below and at or above 25% provisional SpotClean background, using identical "
+                 "paired footprints for both methods within each stratum.", ""]
+    for row in (() if fixed else regional.itertuples()):
         lbl = lookup[row.group,row.panel]
         lines.append(f"| {row.region} | {lbl} | {row.cells} | {fmt(row.raw_UMIs)} | "
                      f"{fmt(row.sparkle_retention,True)} | {fmt(row.spotclean_retention,True)} |")
@@ -277,6 +421,11 @@ def compare_regions(regions, output_dir):
                   "fits available for the same gene panel. It reports its contributing regions and cell count. "
                   "A region with more observed UMIs contributes more to the pooled fraction. "
                   "These are selected regions within a specimen, so variation across them is descriptive.",""]
+        if fixed:
+            lines[-2] = ("Each pooled estimate uses the same measured cell footprints, marker genes and raw "
+                         "denominators for both methods. Halos supply modeling context and may overlap. "
+                         "Disjoint owners prevent repeated cell or disk-bin observations. Per-tile "
+                         "results and fit availability are tabulated separately.")
         for r in pooled.itertuples():
             lines.append(f"- {lookup[r.group,r.panel]} across {r.paired_regions} region(s), {r.cells} cells "
                          f"and {fmt(r.raw_UMIs)} observed UMIs. SPARKLE retained {fmt(r.sparkle_retention,True)} "
@@ -284,7 +433,7 @@ def compare_regions(regions, output_dir):
     else:
         lines += ["","No regions reached the readout stage. Inspect the selection and stage receipts."]
     lines += ["","## Interpretation","",
-              "Read the first two rows of each region together. Loss of myeloid counts in nearby pan-T-supported "
+              "Read the two myeloid endpoints together. Loss of myeloid counts in nearby pan-T-supported "
               "cells is more persuasive when macrophage markers are retained in the same fit. These observations "
               "alone cannot assign the true source of an individual transcript.",
               "", "The edge sensitivity table repeats the group counts and retention estimates for centroids within one "
@@ -295,7 +444,10 @@ def compare_regions(regions, output_dir):
               "score table measures observed Cd4, Cd8a and Cd8b1 by mask assignment and H&E score in the inner core."]
     issues = [f"- {r.region} · {m} {getattr(r,m)}" for r in status.itertuples()
               for m in METHODS if getattr(r,m) != "verified"]
-    if issues:
+    if issues and fixed:
+        lines += ["", f"{len(issues)} tile/method combinations lack a verified fit. "
+                  "See region_status.csv for each tile and domain_coverage.csv for coverage."]
+    elif issues:
         lines.extend(["","## Model availability","",*issues])
     (out/"paired_readout.md").write_text("\n".join(lines)+"\n",encoding="utf-8")
     return dict(n_regions=len(status), n_verified_pairs=int((status.sparkle.eq("verified") &
