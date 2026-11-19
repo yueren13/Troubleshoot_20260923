@@ -2,10 +2,14 @@
 
 ## Run on the Adagrasib project
 
-1. Extract **CT26_AllCell_ResolVI_Pilot.zip** inside the CT26 project used for 08V. Keep both notebooks and all four Python modules together. If the project is elsewhere, set `PROJECT_ROOT` in the first code cell.
+1. Extract **CT26_AllCell_ResolVI_Pilot.zip** inside the CT26 project used for 08V. Keep the notebooks and all four Python modules together. If the project is elsewhere, set `PROJECT_ROOT` in the first code cell.
 2. Run **09A_All_Cell_Gene_Map.ipynb** for **Ada-14R** in the project's Python kernel. This mouse had 284,041 retained tissue cells in the earlier 08U analysis. The input receipt gives the count under the current pilot's coordinate and sample rules. For a second mouse, set `SAMPLES = ["Ada-14R", "Ada-9"]`. Previously completed runs are reused.
 3. Open **09B_ResolVI_One_Sample.ipynb** in the scvi-tools kernel. Use the same output root as 09A so the prepared count input can be reused. The two notebooks can also be run independently. The first 09B fit uses a contiguous region with all available cell types. To fit the entire mouse, change `MODE` to `"full"`. The full and tile runs have different output directories.
 4. Each notebook creates a **downloadable return-to-chat ZIP beside the notebook**. 09A includes gene maps and predeclared marker-pair results; 09B includes clustering, marker specificity, spatial controls, model-mixture summaries, and run-size information. The input H5AD, per-cell assignments and latent matrices stay in the working directory.
+
+## Audit the 09B PCA clusters
+
+Run **09C_PCA_Cluster_Audit.ipynb** beside 09B in the same Python kernel. It reads the saved PCA coordinates, cell assignments and prepared count H5AD. It selects the completed Ada-14R pilot `09B_4403598b0ac3` when available. Set `RUN_DIR` to select another completed run. The audit shows the size, RNA depth, detected genes, marker support, and tissue distribution of each original PCA cluster in the evaluation core. It also checks how cluster membership changes at lower Leiden resolutions on a graph rebuilt from the saved coordinates. It creates a downloadable `09C_return_to_chat_*.zip` beside the notebook. Both model fits and the observed cell assignments are reused.
 
 ## Inputs and environment
 
