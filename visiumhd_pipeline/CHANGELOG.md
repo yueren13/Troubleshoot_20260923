@@ -1,5 +1,9 @@
 # Changelog
 
+## Companion notebook updates
+
+- Add a fixed-disk 09H recovery notebook that reuses verified SPARKLE estimates, retries the SpotClean shared-gene fit, and reports retention and coverage across complete cell footprints.
+
 ## Unreleased — repository foundation (2026-09-25)
 
 - Import the v2 review pipeline into `visiumhd_pipeline/`, separate from the preserved historical notebooks.
